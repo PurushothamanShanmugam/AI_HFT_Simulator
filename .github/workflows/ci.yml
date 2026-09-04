@@ -33,6 +33,9 @@ jobs:
           pip install -r requirements.txt \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
+      - name: Install lint & test tools
+        run: pip install ruff pytest-cov
+
       - name: Lint with ruff
         run: |
           ruff check src/ tests/ main.py kafka_producer.py kafka_consumer.py
