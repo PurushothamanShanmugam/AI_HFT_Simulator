@@ -1,0 +1,181 @@
+# HFT AI Simulator — Docker Compose
+#
+# Usage:
+#   docker compose up --build                    # dashboard only
+#   docker compose --profile kafka up --build    # with Kafka
+#   docker compose run --rm train-dqn            # train DQN
+#   docker compose run --rm train-ppo            # train PPO
+#   docker compose run --rm train-lstm           # train LSTM
+#   docker compose run --rm train-xgboost        # train XGBoost
+#   docker compose run --rm train-transformer    # train Transformer
+#   docker compose run --rm simulate             # run simulation
+#   docker compose run --rm test                 # run tests
+
+services:
+
+  # ── Dashboard ────────────────────────────────────────────────────────────
+  dashboard:
+    build: .
+    container_name: hft-ai-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BOOTSTRAP=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # ── Zookeeper ─────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: hft-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    profiles:
+      - kafka
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: hft-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 1
+    profiles:
+      - kafka
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Kafka Producer ────────────────────────────────────────────────────────
+  producer:
+    build: .
+    container_name: hft-producer
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - CSV_FILE=${CSV_FILE:-data/synthetic/kafka_test_data.csv}
+      - TICK_INTERVAL=${TICK_INTERVAL:-0.05}
+    command: python kafka_producer.py
+    depends_on:
+      kafka:
+        condition: service_healthy
+    profiles:
+      - kafka
+
+  # ── Training services ─────────────────────────────────────────────────────
+  train-dqn:
+    build: .
+    container_name: hft-train-dqn
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.models.train_dqn
+    profiles:
+      - train
+
+  train-ppo:
+    build: .
+    container_name: hft-train-ppo
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.models.train_ppo
+    profiles:
+      - train
+
+  train-lstm:
+    build: .
+    container_name: hft-train-lstm
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.models.train_lstm
+    profiles:
+      - train
+
+  train-xgboost:
+    build: .
+    container_name: hft-train-xgboost
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.models.train_xgboost
+    profiles:
+      - train
+
+  train-transformer:
+    build: .
+    container_name: hft-train-transformer
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.models.train_transformer
+    profiles:
+      - train
+
+  # ── Simulation ────────────────────────────────────────────────────────────
+  simulate:
+    build: .
+    container_name: hft-simulate
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python -m src.simulation.multi_agent_sim
+    profiles:
+      - simulate
+
+  # ── Tests ─────────────────────────────────────────────────────────────────
+  test:
+    build: .
+    container_name: hft-test
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: pytest tests/ -v --tb=short
+    profiles:
+      - test

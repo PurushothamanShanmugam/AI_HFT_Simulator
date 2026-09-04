@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Model artifacts & outputs (large, regenerable)
+outputs/models/
+outputs/metrics/
+outputs/reports/
+
+# Data files
+data/
+*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
